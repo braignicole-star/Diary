@@ -1,0 +1,318 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>Pflegetagebuch Pro</title>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/exceljs/4.3.0/exceljs.min.js"></script>
+    <style>
+        body { 
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif; 
+            padding: 15px; 
+            max-width: 650px; 
+            margin: auto; 
+            background-color: #f8f9fa; 
+            color: #2c3e50; 
+        }
+        h2 { text-align: center; color: #2c3e50; margin-bottom: 5px; }
+        .subtitle { text-align: center; font-size: 0.9em; color: #7f8c8d; margin-bottom: 25px; }
+        .card { background: white; padding: 20px; border-radius: 12px; box-shadow: 0 4px 6px rgba(0,0,0,0.05); margin-bottom: 20px; }
+        label { font-weight: bold; display: block; margin-top: 15px; font-size: 0.95em; }
+        input, select, textarea { 
+            width: 100%; 
+            padding: 12px; 
+            margin-top: 6px; 
+            border-radius: 8px; 
+            border: 1px solid #d5d8dc; 
+            box-sizing: border-box; 
+            font-size: 16px; 
+            background-color: #fff;
+        }
+        textarea { resize: vertical; height: 90px; }
+        .hint { font-size: 0.8em; color: #7f8c8d; margin-top: 4px; display: flex; align-items: center; }
+        button { 
+            width: 100%; 
+            padding: 14px; 
+            border-radius: 8px; 
+            border: none; 
+            font-weight: bold; 
+            font-size: 16px; 
+            margin-top: 15px; 
+            cursor: pointer; 
+        }
+        .btn-save { background-color: #2c3e50; color: white; }
+        .btn-export { background-color: #27ae60; color: white; margin-top: 25px; }
+        .btn-danger { background-color: #e74c3c; color: white; font-size: 14px; padding: 8px; margin-top: 30px; }
+        
+        .preview-title { font-weight: bold; margin-top: 25px; font-size: 1.1em; border-bottom: 2px solid #2c3e50; padding-bottom: 5px; }
+        .entry-item { background: #fff; padding: 12px; border-left: 4px solid #3498db; margin-top: 10px; border-radius: 0 8px 8px 0; font-size: 0.9em; }
+        .entry-header { display: flex; justify-content: space-between; font-weight: bold; color: #34495e; margin-bottom: 5px; }
+    </style>
+</head>
+<body>
+
+    <h2>Pflegetagebuch</h2>
+    <div class="subtitle">MD-Assessment (Kompatibilitätserhöhung iOS & Mac)</div>
+
+    <div class="card">
+        <label for="modul">Lebensbereich (Assessment-Modul):</label>
+        <select id="modul">
+            <option value="1. Mobilität">Modul 1: Mobilität</option>
+            <option value="2. Kognitive/Kommunikative Fähigkeiten">Modul 2: Kognitive / Kommunikative Fähigkeiten</option>
+            <option value="3. Verhalten/Psychische Problemlagen" selected>Modul 3: Verhalten / Psychische Problemlagen</option>
+            <option value="4. Selbstversorgung">Modul 4: Selbstversorgung</option>
+            <option value="5. Umgang mit Krankheit/Therapie">Modul 5: Umgang mit Krankheit / Therapie</option>
+            <option value="6. Alltagsleben/Soziale Kontakte">Modul 6: Alltagsleben / Soziale Kontakte</option>
+        </select>
+
+        <label for="taetigkeit">Genaue Tätigkeit / Vorgang:</label>
+        <div class="hint">🎤 Stimmeingabe über das Tastatur-Mikrofon nutzen</div>
+        <textarea id="taetigkeit" placeholder="z. B. Strukturierung mit Bildkarten..."></textarea>
+
+        <label for="hilfe">Art der Hilfe:</label>
+        <select id="hilfe">
+            <option value="Anleitung (A)">Anleitung (A)</option>
+            <option value="Unterstützung (U)">Unterstützung (U)</option>
+            <option value="Beaufsichtigung (B)">Beaufsichtigung (B)</option>
+            <option value="Teilweise Übernahme (TÜ)">Teilweise Übernahme (TÜ)</option>
+            <option value="Vollständige Übernahme (VÜ)">Vollständige Übernahme (VÜ)</option>
+        </select>
+
+        <label for="dauer">Dauer (in Minuten):</label>
+        <input type="number" id="dauer" inputmode="numeric" pattern="[0-9]*" placeholder="z. B. 15">
+
+        <label for="bemerkung">Besondere Vorkommnisse / Bemerkungen:</label>
+        <textarea id="bemerkung" placeholder="z. B. Meltdown verhindert durch Reizabschirmung..."></textarea>
+
+        <button class="btn-save" onclick="saveEntry()">Eintrag hinzufügen</button>
+    </div>
+
+    <div class="preview-title">Letzte Einträge auf diesem Gerät</div>
+    <div id="previewList"></div>
+
+    <button class="btn-export" onclick="exportToExcel()">Professionelle Excel-Datei (.XLSX) generieren</button>
+    <button class="btn-danger" onclick="clearAllData()">Alle Daten löschen</button>
+
+    <script>
+        let entries = JSON.parse(localStorage.getItem('pflegeEintraegePro')) || [];
+        updatePreview();
+
+        function saveEntry() {
+            const now = new Date();
+            const datum = now.toLocaleDateString('de-DE');
+            const uhrzeit = now.toLocaleTimeString('de-DE', { hour: '2-digit', minute: '2-digit' });
+            
+            const modul = document.getElementById('modul').value;
+            const taetigkeit = document.getElementById('taetigkeit').value.trim();
+            const hilfe = document.getElementById('hilfe').value;
+            const dauer = document.getElementById('dauer').value.trim();
+            const bemerkung = document.getElementById('bemerkung').value.trim();
+
+            if (!taetigkeit || !dauer) {
+                alert('Bitte trage eine Tätigkeit und eine Dauer ein!');
+                return;
+            }
+
+            const entry = { datum, uhrzeit, modul, taetigkeit, hilfe, dauer: parseInt(dauer), bemerkung };
+            entries.unshift(entry);
+            localStorage.setItem('pflegeEintraegePro', JSON.stringify(entries));
+
+            document.getElementById('taetigkeit').value = '';
+            document.getElementById('dauer').value = '';
+            document.getElementById('bemerkung').value = '';
+
+            updatePreview();
+            alert('Eintrag hinzugefügt!');
+        }
+
+        function updatePreview() {
+            const container = document.getElementById('previewList');
+            container.innerHTML = '';
+            const displayCount = Math.min(entries.length, 3);
+            
+            if(displayCount === 0) {
+                container.innerHTML = '<div style="color:#7f8c8d; font-style:italic; padding:10px;">Noch keine Einträge auf diesem Gerät vorhanden.</div>';
+                return;
+            }
+            
+            for (let i = 0; i < displayCount; i++) {
+                const e = entries[i];
+                const div = document.createElement('div');
+                div.className = 'entry-item';
+                div.innerHTML = `
+                    <div class="entry-header"><span>${e.datum} - ${e.uhrzeit} Uhr</span><span><strong>${e.dauer} Min.</strong></span></div>
+                    <div><strong>${e.modul}:</strong> ${e.taetigkeit}</div>
+                `;
+                container.appendChild(div);
+            }
+        }
+
+        function clearAllData() {
+            if(confirm('Wirklich alle lokalen Daten löschen?')) {
+                entries = [];
+                localStorage.removeItem('pflegeEintraegePro');
+                updatePreview();
+            }
+        }
+
+        async function exportToExcel() {
+            if (entries.length === 0) {
+                alert('Es müssen Einträge vorhanden sein, um eine Excel-Datei zu erstellen.');
+                return;
+            }
+
+            if (typeof ExcelJS === 'undefined') {
+                alert('Die Excel-Bibliothek wurde blockiert. Bitte stelle sicher, dass du online bist.');
+                return;
+            }
+
+            // --- DEVISE FÜR IOS SAFARI: JETZT SYNCHRON EIN TAB ÖFFNEN ---
+            let iosWindow = null;
+            const isIOS = /iPad|iPhone|iPod/.test(navigator.userAgent) && !window.MSStream;
+            
+            if (isIOS) {
+                iosWindow = window.open('', '_blank');
+                if (iosWindow) {
+                    iosWindow.document.write('<h2>Generiere Excel-Tabelle...</h2><p>Bitte einen Moment warten, dein iPhone lädt die Datei gleich herunter.</p>');
+                }
+            }
+
+            try {
+                const workbook = new ExcelJS.Workbook();
+                const fontName = 'Segoe UI';
+                const headerFill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FF2C3E50' } };
+                const zebraFill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFF8F9FA' } };
+                const totalFill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFEAAEDED' } };
+                const borderThin = {
+                    top: { style: 'thin', color: { argb: 'D5D8DC' } }, left: { style: 'thin', color: { argb: 'D5D8DC' } },
+                    bottom: { style: 'thin', color: { argb: 'D5D8DC' } }, right: { style: 'thin', color: { argb: 'D5D8DC' } }
+                };
+
+                const modulesList = [
+                    "1. Mobilität", "2. Kognitive/Kommunikative Fähigkeiten", "3. Verhalten/Psychische Problemlagen",
+                    "4. Selbstversorgung", "5. Umgang mit Krankheit/Therapie", "6. Alltagsleben/Soziale Kontakte"
+                ];
+
+                const wsDash = workbook.addWorksheet('Übersicht & Statistik');
+                wsDash.views = [{ showGridLines: true }];
+                
+                wsDash.getCell('B2').value = "Pflegetagebuch - MD-Begutachtungsassessment";
+                wsDash.getCell('B2').font = { name: fontName, size: 16, bold: true, color: { argb: 'FF2C3E50' } };
+
+                const dashHeaders = ["Lebensbereich / Modul", "Gesamtdauer (Minuten)", "Gesamtdauer (Stunden)"];
+                dashHeaders.forEach((h, i) => {
+                    const cell = wsDash.getCell(5, i + 2);
+                    cell.value = h;
+                    cell.font = { name: fontName, size: 11, bold: true, color: { argb: 'FFFFFFFF' } };
+                    cell.fill = headerFill;
+                    cell.border = borderThin;
+                });
+
+                const endDataRow = entries.length + 1;
+
+                modulesList.forEach((mod, idx) => {
+                    const rIdx = 6 + idx;
+                    wsDash.getCell(`B${rIdx}`).value = mod;
+                    wsDash.getCell(`B${rIdx}`).border = borderThin;
+                    
+                    const cMin = wsDash.getCell(`C${rIdx}`);
+                    cMin.value = { formula: `SUMIF(Pflegetagebuch!$C$2:$C$${endDataRow}, B${rIdx}, Pflegetagebuch!$F$2:$F$${endDataRow})` };
+                    cMin.numFmt = '#,##0';
+                    cMin.border = borderThin;
+                    
+                    const cStd = wsDash.getCell(`D${rIdx}`);
+                    cStd.value = { formula: `C${rIdx}/60` };
+                    cStd.numFmt = '#,##0.0';
+                    cStd.border = borderThin;
+
+                    if (rIdx % 2 === 1) {
+                        wsDash.getCell(`B${rIdx}`).fill = zebraFill;
+                        cMin.fill = zebraFill;
+                        cStd.fill = zebraFill;
+                    }
+                });
+
+                wsDash.getCell('B12').value = "Gesamtergebnis";
+                wsDash.getCell('C12').value = { formula: "SUM(C6:C11)" };
+                wsDash.getCell('D12').value = { formula: "SUM(D6:D11)" };
+                ['B12', 'C12', 'D12'].forEach(ref => {
+                    const c = wsDash.getCell(ref);
+                    c.fill = totalFill;
+                    c.font = { name: fontName, size: 11, bold: true };
+                    c.border = { top: { style: 'thin', color: { argb: 'FF2C3E50' } }, bottom: { style: 'double', color: { argb: 'FF2C3E50' } } };
+                });
+
+                wsDash.getColumn('B').width = 40;
+                wsDash.getColumn('C').width = 22;
+                wsDash.getColumn('D').width = 22;
+
+                const wsDiary = workbook.addWorksheet('Pflegetagebuch');
+                wsDiary.views = [{ showGridLines: true, state: 'frozen', ySplit: 1 }];
+
+                wsDiary.columns = [
+                    { header: 'Datum', key: 'datum', width: 13 },
+                    { header: 'Uhrzeit', key: 'uhrzeit', width: 10 },
+                    { header: 'Lebensbereich (Modul)', key: 'modul', width: 35 },
+                    { header: 'Genaue Tätigkeit / Vorgang', key: 'taetigkeit', width: 48 },
+                    { header: 'Art der Hilfe', key: 'hilfe', width: 22 },
+                    { header: 'Dauer (Minuten)', key: 'dauer', width: 16 },
+                    { header: 'Besondere Vorkommnisse / Bemerkungen', key: 'bemerkung', width: 48 }
+                ];
+
+                wsDiary.getRow(1).eachCell((cell) => {
+                    cell.fill = headerFill;
+                    cell.font = { name: fontName, size: 11, bold: true, color: { argb: 'FFFFFFFF' } };
+                    cell.border = borderThin;
+                });
+
+                const exportList = [...entries].reverse();
+                exportList.forEach((e, idx) => {
+                    const row = wsDiary.addRow({
+                        datum: e.datum, uhrzeit: e.uhrzeit, modul: e.modul,
+                        taetigkeit: e.taetigkeit, hilfe: e.hilfe, dauer: e.dauer, bemerkung: e.bemerkung
+                    });
+                    const isEven = idx % 2 === 0;
+                    row.eachCell((cell, colNum) => {
+                        cell.border = borderThin;
+                        if (!isEven) cell.fill = zebraFill;
+                        if ([1, 2, 5].includes(colNum)) cell.alignment = { horizontal: 'center' };
+                        else if (colNum === 6) { cell.alignment = { horizontal: 'right' }; cell.numFmt = '#,##0'; }
+                        else cell.alignment = { horizontal: 'left', wrapText: true };
+                    });
+                });
+
+                const totalRowIdx = exportList.length + 2;
+                wsDiary.getCell(`E${totalRowIdx}`).value = "Gesamtdauer:";
+                wsDiary.getCell(`F${totalRowIdx}`).value = { formula: `SUM(F2:F${totalRowIdx - 1})` };
+                wsDiary.getRow(totalRowIdx).eachCell((cell) => {
+                    cell.fill = totalFill;
+                    cell.font = { name: fontName, size: 11, bold: true };
+                    cell.border = { top: { style: 'thin', color: { argb: 'FF2C3E50' } }, bottom: { style: 'double', color: { argb: 'FF2C3E50' } } };
+                });
+
+                // DATENBEREITSTELLUNG
+                const buffer = await workbook.xlsx.writeBuffer();
+                // Expliziter iOS MIME-Typ
+                const blob = new Blob([buffer], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' });
+                const url = URL.createObjectURL(blob);
+                
+                if (isIOS && iosWindow) {
+                    // Für das iPhone leiten wir das synchron geöffnete Tab auf die Blob-URL um
+                    iosWindow.location.href = url;
+                } else {
+                    // Fallback für Mac/Desktop/Android
+                    const link = document.createElement('a');
+                    link.href = url;
+                    link.download = `Pflegetagebuch_MD_Assessment_${new Date().toISOString().slice(0,10)}.xlsx`;
+                    document.body.appendChild(link);
+                    link.click();
+                    setTimeout(() => { document.body.removeChild(link); URL.revokeObjectURL(url); }, 100);
+                }
+            } catch (err) {
+                if (iosWindow) iosWindow.close();
+                alert("Fehler: " + err.message);
+            }
+        }
+    </script>
+</body>
+</html>
